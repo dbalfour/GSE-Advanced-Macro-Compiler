@@ -7,94 +7,41 @@ local Statics = GSE.Static
 
 function GSE:UNIT_FACTION()
     -- local pvpType, ffa, _ = GetZonePVPInfo()
-    if UnitIsPVP("player") then
-        GSE.PVPFlag = true
-    else
-        GSE.PVPFlag = false
-    end
+    GSE.PVPFlag = UnitIsPvP("player")
+
     GSE.PrintDebugMessage("PVP Flag toggled to " .. tostring(GSE.PVPFlag), Statics.DebugModules["API"])
     GSE.ReloadSequences()
 end
 
 function GSE:ZONE_CHANGED_NEW_AREA()
     local _, type, difficulty, _, _, _, _, _, _ = GetInstanceInfo()
-    if type == "pvp" then
-        GSE.PVPFlag = true
-    else
-        GSE.PVPFlag = false
-    end
-    if difficulty == 23 then -- Mythic 5 player
-        GSE.inMythic = true
-    else
-        GSE.inMythic = false
-    end
-    if difficulty == 1 then -- Normal
-        GSE.inDungeon = true
-    else
-        GSE.inDungeon = false
-    end
-    if difficulty == 2 then -- Heroic
-        GSE.inHeroic = true
-    else
-        GSE.inHeroic = false
-    end
-    if difficulty == 8 then -- Mythic+
-        GSE.inMythicPlus = true
-    else
-        GSE.inMythicPlus = false
-    end
-
-    if difficulty == 24 or difficulty == 33 then -- Timewalking  24 Dungeon, 33 raid
-        GSE.inTimeWalking = true
-    else
-        GSE.inTimeWalking = false
-    end
-    if type == "raid" then
-        GSE.inRaid = true
-    else
-        GSE.inRaid = false
-    end
-    if IsInGroup() then
-        GSE.inParty = true
-    else
-        GSE.inParty = false
-    end
-    if type == "arena" then
-        GSE.inArena = true
-    else
-        GSE.inArena = false
-    end
-    if type == "scenario" or difficulty == 167 or difficulty == 152 then
-        GSE.inScenario = true
-    else
-        GSE.inScenario = false
-    end
+    GSE.PVPFlag = (type == "player") -- PvP
+    GSE.inMythics = (difficulty == "23") -- Mythic 5 player
+    GSE.inDungeon = (difficulty == 1) -- Normal
+    GSE.inHeroic = (difficulty == 2) -- Heroic
+    GSE.inMythicPlus = (difficulty == 8) -- Mythic+
+    GSE.inTimeWalking = (difficulty == 24 or difficulty == 33) -- Timewalking 24 Dungeon, 33 raid
+    GSE.inRaid = (type == "raid")
+    GSE.inParty = isInGroup()
+    GSE.inArena = (type == "arena")
+    GSE.inScenario = (type == "scenario" or difficulty == 167 or difficulty == 152)
 
     GSE.PrintDebugMessage(
-        table.concat(
-            {
-                "PVP: ",
-                tostring(GSE.PVPFlag),
-                " inMythic: ",
-                tostring(GSE.inMythic),
-                " inRaid: ",
-                tostring(GSE.inRaid),
-                " inDungeon ",
-                tostring(GSE.inDungeon),
-                " inHeroic ",
-                tostring(GSE.inHeroic),
-                " inArena ",
-                tostring(GSE.inArena),
-                " inTimeWalking ",
-                tostring(GSE.inTimeWalking),
-                " inMythicPlus ",
-                tostring(GSE.inMythicPlus),
-                " inScenario ",
-                tostring(GSE.inScenario)
-            }
+        string.format(
+            "PVP: %s inMythic: %s inRaid: %s inDungeon: %s inHeroic: %s inArena: %s inTimeWalking: %s inMythicPlus: %s inScenario: %s",
+            tostring(GSE.PVPFlag),
+            tostring(GSE.inMythic),
+            tostring(GSE.inRaid),
+            tostring(GSE.inDungeon),
+            tostring(GSE.inHeroic),
+            tostring(GSE.inArena),
+            tostring(GSE.inTimeWalking),
+            tostring(GSE.inMythicPlus),
+            tostring(GSE.inScenario)
         ),
         Statics.DebugModules["API"]
     )
+
     -- Force Reload of all Sequences
     GSE.UnsavedOptions.ReloadQueued = nil
     GSE.ReloadSequences()
