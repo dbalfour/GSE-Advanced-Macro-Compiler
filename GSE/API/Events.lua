@@ -48,32 +48,34 @@ function GSE:ZONE_CHANGED_NEW_AREA()
 end
 
 local function LoadKeyBindings(payload)
-    if GSE.isEmpty(GSE_C) then
-        GSE_C = {}
+    if InCombatLockdown() then return end -- early return if in combat
+
+    -- Helper function to get or initialize a nested table (might want to store this one with other helper functions)
+    local function GetOrCreateNestedTable(t, keys)
+        for _, key in ipairs(keys) do
+            t[key] = GSE.isEmpty(t[key]) and {} or t[key]
+            t = t[key]
+        end
+        return t
     end
-    if GSE.isEmpty(GSE_C["KeyBindings"]) then
-        GSE_C["KeyBindings"] = {}
-    end
-    if GSE.isEmpty(GSE_C["KeyBindings"][tostring(GetSpecialization())]) then
-        GSE_C["KeyBindings"][tostring(GetSpecialization())] = {}
-    end
-    for k, v in pairs(GSE_C["KeyBindings"][tostring(GetSpecialization())]) do
-        if k ~= "LoadOuts" and not InCombatLockdown() then
+
+    local specKeyBindings = GetOrCreateNestedTable(GSE_C, { "KeyBindings", tostring(GetSpecialization()) })
+
+    -- Load regular keybindings
+    for k, v in pairs(specKeyBindings) do
+        if k ~= "LoadOuts" then
             SetBindingClick(k, v, _G[v])
         end
     end
 
-    if payload and not InCombatLockdown() then
-        local selected =
-            PlayerUtil.GetCurrentSpecID() and
-            tostring(C_ClassTalents.GetLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID()))
+    if payload then
+        local selected = PlayerUtil.GetCurrentSpecID() and
+                         tostring(C_ClassTalents.GetLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID()))
+        local loadouts = specKeyBindings["LoadOuts"]
 
-        if
-            selected and GSE_C["KeyBindings"][tostring(GetSpecialization())]["LoadOuts"] and
-                GSE_C["KeyBindings"][tostring(GetSpecialization())]["LoadOuts"][selected]
-         then
+        if selected and not GSE.isEmpty(loadouts) and loadouts[selected] then
             GSE.PrintDebugMessage("changing from ", payload, tostring(GSE.GetSelectedLoadoutConfigID()), "EVENTS")
-            for k, v in pairs(GSE_C["KeyBindings"][tostring(GetSpecialization())]["LoadOuts"][selected]) do
+            for k, v in pairs(loadouts[selected]) do
                 SetBinding(k)
                 SetBindingClick(k, v, _G[v])
             end
@@ -217,54 +219,37 @@ function GSE:PLAYER_REGEN_ENABLED(unit, event, addon)
 end
 
 function GSE:PLAYER_LOGOUT()
-    if not GSE.UnsavedOptions["GUI"] then
-        if GSE["MenuFrame"] then
-            if GSE.isEmpty(GSEOptions.frameLocations) then
-                GSEOptions.frameLocations = {}
-            end
+    if GSE.UnsavedOptions["GUI"] then return end -- Early exit if no unsaved options
 
-            if GSE.isEmpty(GSEOptions.frameLocations.menu) then
-                GSEOptions.frameLocations.menu = {}
-            end
-            GSEOptions.frameLocations.menu.top = GSE.MenuFrame.frame:GetTop()
-            GSEOptions.frameLocations.menu.left = GSE.MenuFrame.frame:GetLeft()
-        end
-        if GSE["GUIEditFrame"] and GSE.GUIEditFrame.frame then
-            if GSE.isEmpty(GSEOptions.frameLocations.sequenceeditor) then
-                GSEOptions.frameLocations.sequenceeditor = {}
-            end
-            GSEOptions.frameLocations.sequenceeditor.top = GSE.GUIEditFrame.frame:GetTop()
-            GSEOptions.frameLocations.sequenceeditor.left = GSE.GUIEditFrame.frame:GetLeft()
-        end
-        if GSE["GUIVariableFrame"] then
-            if GSE.isEmpty(GSEOptions.frameLocations.variablesframe) then
-                GSEOptions.frameLocations.variablesframe = {}
-            end
+    -- Helper function to simplify repeated logic
+    local function updateFrameLocation(frameName)
+        GSEOptions.frameLocations[frameName] = GSEOptions.frameLocations[frameName] or {}
+        GSEOptions.frameLocations[frameName].top = GSE[frameName].frame:GetTop()
+        GSEOptions.frameLocations[frameName].left = GSE[frameName].frame:GetLeft()
+    end
 
-            GSEOptions.frameLocations.variablesframe.top = GSE.GUIVariableFrame.frame:GetTop()
-            GSEOptions.frameLocations.variablesframe.left = GSE.GUIVariableFrame.frame:GetLeft()
-        end
-        if GSE["GUIMacroFrame"] then
-            if GSE.isEmpty(GSEOptions.frameLocations.macroframe) then
-                GSEOptions.frameLocations.macroframe = {}
-            end
-            GSEOptions.frameLocations.macroframe.top = GSE.GUIMacroFrame.frame:GetTop()
-            GSEOptions.frameLocations.macroframe.left = GSE.GUIMacroFrame.frame:GetLeft()
-        end
-        if GSE["GUIDebugFrame"] then
-            if GSE.isEmpty(GSEOptions.frameLocations.debug) then
-                GSEOptions.frameLocations.debug = {}
-            end
-            GSEOptions.frameLocations.debug.top = GSE.GUIDebugFrame.frame:GetTop()
-            GSEOptions.frameLocations.debug.left = GSE.GUIDebugFrame.frame:GetLeft()
-        end
-        if GSE["GUIkeybindingframe"] then
-            if GSE.isEmpty(GSEOptions.frameLocations.keybindingframe) then
-                GSEOptions.frameLocations.keybindingframe = {}
-            end
-            GSEOptions.frameLocations.keybindingframe.top = GSE.GUIkeybindingframe.frame:GetTop()
-            GSEOptions.frameLocations.keybindingframe.left = GSE.GUIkeybindingframe.frame:GetLeft()
-        end
+    if GSE["MenuFrame"] then
+        updateFrameLocation("MenuFrame")
+    end
+
+    if GSE["GUIEditFrame"] and GSE.GUIEditFrame.frame then
+        updateFrameLocation("GUIEditFrame")
+    end
+
+    if GSE["GUIVariableFrame"] then
+        updateFrameLocation("GUIVariableFrame")
+    end
+
+    if GSE["GUIMacroFrame"] then
+        updateFrameLocation("GUIMacroFrame")
+    end
+
+    if GSE["GUIDebugFrame"] then
+        updateFrameLocation("GUIDebugFrame")
+    end
+
+    if GSE["GUIkeybindingframe"] then
+        updateFrameLocation("GUIkeybindingframe")
     end
 end
 
@@ -431,40 +416,39 @@ function GSE:ProcessOOCQueue()
         GSE:ZONE_CHANGED_NEW_AREA()
         GSE.currentZone = GetRealZoneText()
     end
-    for k, v in ipairs(GSE.OOCQueue) do
-        if not InCombatLockdown() then
-            if v.action == "UpdateSequence" then
-                GSE.OOCUpdateSequence(v.name, v.macroversion)
-            elseif v.action == "Save" then
-                GSE.OOCAddSequenceToCollection(v.sequencename, v.sequence, v.classid)
-            elseif v.action == "Replace" then
-                if GSE.isEmpty(GSE.Library[v.classid][v.sequencename]) then
-                    GSE.AddSequenceToCollection(v.sequencename, v.sequence, v.classid)
-                else
-                    GSE.ReplaceSequence(v.classid, v.sequencename, v.sequence)
-                    GSE.UpdateSequence(v.sequencename, v.sequence.Macros[GSE.GetActiveSequenceVersion(v.sequencename)])
-                end
-            elseif v.action == "updatevariable" then
-                GSE.UpdateVariable(v.variable, v.name)
-            elseif v.action == "updatemacro" then
-                GSE.UpdateMacro(v.node)
-            elseif v.action == "importmacro" then
-                GSE.ImportMacro(v.node)
-            elseif v.action == "managemacros" then
-                GSE.ManageMacros()
-            elseif v.action == "CheckMacroCreated" then
-                GSE.OOCCheckMacroCreated(v.sequencename, v.create)
-            elseif v.action == "MergeSequence" then
-                GSE.OOCPerformMergeAction(v.mergeaction, v.classid, v.sequencename, v.newSequence)
-            elseif v.action == "FinishReload" then
-                GSE.UnsavedOptions.ReloadQueued = nil
-            end
-            GSE.OOCQueue[k] = nil
-        end
-    end
+    
     if not GSE.isEmpty(GSE.GCDLDB) then
         GSE.GCDLDB.value = GSE.GetGCD()
         GSE.GCDLDB.text = string.format("GCD: %ss", GSE.GetGCD())
+    end
+
+    if InCombatLockdown() then return end
+
+    local actionHandler = {
+        ["UpdateSequence"] = function (v) GSE.OOCUpdateSequence(v.name, v.macroversion) end,
+        ["Save"] = function (v) GSE.OOCAddSequenceToCollection(v.sequencename, v.sequence, v.classid) end,
+        ["Replace"] = function (v) if GSE.isEmpty(GSE.Library[v.classid][v.sequencename]) then
+                                        GSE.AddSequenceToCollection(v.sequencename, v.sequence, v.classid)
+                                    else
+                                        GSE.ReplaceSequence(v.classid, v.sequencename, v.sequence)
+                                        GSE.UpdateSequence(v.sequencename, v.sequence.Macros[GSE.GetActiveSequenceVersion(v.sequencename)])
+                                    end
+            end,
+        ["updatevariable"] = function (v) GSE.UpdateVariable(v.variable, v.name) end,
+        ["updatemacro"] = function(v) GSE.UpdateMacro(v.node) end,
+        ["importmacro"] = function(v) GSE.ImportMacro(v.node) end,
+        ["managemacros"] = function(v) GSE.ManageMacros() end,
+        ["CheckMacroCreated"] = function(v) GSE.OOCCheckMacroCreated(v.sequencename, v.create) end,
+        ["MergeSequence"] = function(v) GSE.OOCPerformMergeAction(v.mergeaction, v.classid, v.sequencename, v.newSequence) end,
+        ["FinishReload"] = function(v) GSE.UnsavedOptions.ReloadQueued = nil end
+    }
+    
+    for k, v in ipairs(GSE.OOCQueue) do
+        local handler = actionHandler[v.action]
+        if handler then 
+            handler(v)
+        end
+        GSE.OOCQueue[k] = nil
     end
 end
 
